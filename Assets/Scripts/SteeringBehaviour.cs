@@ -11,7 +11,7 @@ public class SteeringBehaviour : MonoBehaviour
 
 
     // Use this for initialization
-    void Start()
+    void Awake()
     {
         owner = GetComponent<AIAgent>();
 

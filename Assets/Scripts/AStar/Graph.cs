@@ -2,10 +2,13 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+using GGL;
+
 public class Graph : MonoBehaviour
 {
-    public float nodeRadius = 1;
+    public float nodeRadius = 1f;
     public LayerMask unwalkableMask;
+
     public Node[,] nodes;
 
     private float nodeDiameter;
@@ -13,169 +16,216 @@ public class Graph : MonoBehaviour
     private Vector3 scale;
     private Vector3 halfScale;
 
+    private List<Node> path;
+
+
     // Use this for initialization
     void Start()
     {
         CreateGrid();
     }
 
-    void OnDrawGizmos()
+    void OnDrawGizmosSelected()
     {
         Gizmos.color = new Color(0, 0, 1, 0.5f);
         Gizmos.DrawCube(transform.position, transform.localScale);
-
-        //Check if nodes have been created
+        // Check if nodes have been created
         if (nodes != null)
         {
-            // Loop through all the nodes
+            // Loop through all nodes
             for (int x = 0; x < nodes.GetLength(0); x++)
             {
                 for (int z = 0; z < nodes.GetLength(1); z++)
                 {
-                    // Get the node and store it in a variable
+                    // Get the node and store it in variable
                     Node node = nodes[x, z];
 
-                    // set colour of Gizmos for node depending on walkable
-                    Gizmos.color = node.walkable ? new Color(0, 0, 1, 0.5f) : new Color(1, 0, 0, 0.5f);
+                    Gizmos.color = node.walkable ? new Color(0, 0, 1, 0.5f) :
+                                                   new Color(1, 0, 0, 0.5f);
 
-                    // Draw a sphere to represent node
+                    if (path != null && path.Contains(node))
+                    {
+                        Gizmos.color = Color.black;
+                    }
+
+                    // Draw a sphere to represent the node
                     Gizmos.DrawSphere(node.position, nodeRadius);
                 }
             }
         }
     }
 
-    // Generates a 2d grid on the x and z axis
+    private void Update()
+    {
+        UpdateWalkables();
+    }
+
+    // Generates a 2D grid on the X and Z axis
     public void CreateGrid()
     {
         // Calculate the node diameter
         nodeDiameter = nodeRadius * 2f;
 
-        // get transforms scale
+        // Get transform's scale
         scale = transform.localScale;
 
         // Half the scale
-        halfScale = scale / 2;
+        halfScale = scale / 2f;
 
-        // Calcualte the grid size in int form
-        gridSizeX = Mathf.RoundToInt(scale.x / nodeDiameter);
+        // Calculate grid size in (int) form
+        gridSizeX = Mathf.RoundToInt(scale.x / nodeDiameter); // OR halfScale.x / nodeRadius
         gridSizeZ = Mathf.RoundToInt(scale.z / nodeDiameter);
 
-        //Create 2d array of grid sizes calculated
+        // Create a grid of that size
         nodes = new Node[gridSizeX, gridSizeZ];
 
-        // Get the bottom left point of the graph
-        Vector3 bottomLeft = transform.position - Vector3.right * halfScale.x - Vector3.forward * halfScale.z;
+        // Get the bottom left point of the position
+        Vector3 bottomLeft = transform.position - Vector3.right * halfScale.x
+                                                - Vector3.forward * halfScale.z;
 
-        // loop through all the nodes in the grid
+        // Loop throgh all nodes in grid
+        for (int x = 0; x < gridSizeX; x++)
+        {
+            for(int z = 0; z < gridSizeZ; z++)
+            {
+                // Calculate offset for x and z
+                float xOffset = x * nodeDiameter + nodeRadius;
+                float zOffset = z * nodeDiameter + nodeRadius;
+                // Create position using offsets
+                Vector3 nodePoint = bottomLeft + Vector3.right * xOffset
+                                               + Vector3.forward * zOffset;
+                // Use Physics to check if node collided with non-walkable object
+                bool walkable = !Physics.CheckSphere(nodePoint, nodeRadius, unwalkableMask);
+                // Create the node and put it in the 2D array
+                nodes[x, z] = new Node(walkable, nodePoint, x, z);
+            }
+        }
+    }
+
+    public void UpdateWalkables()
+    {
         for (int x = 0; x < gridSizeX; x++)
         {
             for (int z = 0; z < gridSizeZ; z++)
             {
-                // Calculate an offset for x and z
-                float xOffset = x * nodeDiameter + nodeRadius;
-                float zOffset = z * nodeDiameter + nodeRadius;
-                // Create position using offsets
-                Vector3 nodePos = bottomLeft + Vector3.right * xOffset + Vector3.forward * zOffset;
-
-                // Use physics to check is node collides with non-walkable object
-                bool walkable = !Physics.CheckSphere(nodePos, nodeRadius, unwalkableMask);
-                //Create node and place in 2d array coordinate
-                nodes[x, z] = new Node(walkable, nodePos, x, z);
+                Node currentNode = nodes[x, z];
+                currentNode.walkable = !Physics.CheckSphere(currentNode.position, nodeRadius, unwalkableMask);
             }
         }
     }
 
-    // Update is called once per frame
-    void Update()
+    public List<Node> GetNeighbours(Node node)
     {
-        CheckWalkables();
-    }
+        List<Node> neighbours = new List<Node>();
 
-    public void CheckWalkables()
-    {
-        //Loop through all the nodes
-        for (int x = 0; x < nodes.GetLength(0); x++)
+        for (int x = -1; x <= 1; x++)
         {
-            for (int z = 0; z < nodes.GetLength(1); z++)
+            for (int z = -1; z <= 1; z++)
             {
-                // Grab node at index
-                Node node = nodes[x, z];
-                // Check if node collided with unwalkable
-                node.walkable = !Physics.CheckSphere(node.position, nodeRadius, unwalkableMask);
+                if (x == 0 && z == 0)
+                    continue;
+
+                int checkX = node.gridX + x;
+                int checkZ = node.gridZ + z;
+
+                if (checkX >= 0 && checkX < gridSizeX && checkZ >= 0 && checkZ < gridSizeZ)
+                {
+                    neighbours.Add(nodes[checkX, checkZ]);
+                }
             }
         }
+
+        return neighbours;
     }
 
-    public Node GetNodeFromPosition(Vector3 position)
-    {
-        // Calculate percentage of grid position
-        float percentX = (position.x + halfScale.x) / scale.x;
-        float percentZ = (position.z + halfScale.z) / scale.z;
 
-        // Clamp percentage to a 0-1 ratio
+    public Node NodeFromWorldPoint(Vector3 worldPosition)
+    {
+        float percentX = (worldPosition.x + scale.x / 2) / scale.x;
+        float percentZ = (worldPosition.z + scale.z / 2) / scale.z;
         percentX = Mathf.Clamp01(percentX);
         percentZ = Mathf.Clamp01(percentZ);
 
         int x = Mathf.RoundToInt((gridSizeX - 1) * percentX);
         int z = Mathf.RoundToInt((gridSizeZ - 1) * percentZ);
-
-        Node node = nodes[x, z];
-
-        if (!node.walkable)
-            return FindClosestWalkable(node);
-
-        //Return the node at translated coordinate
-        return node;
-
-
+        return nodes[x, z];
     }
 
-    public Node FindClosestWalkable(Node node)
+    public List<Node> FindPath(Vector3 startPos, Vector3 targetPos)
     {
-        for (int i = 0; i < gridSizeX * gridSizeZ; i++)
+        Node startNode = NodeFromWorldPoint(startPos);
+        Node targetNode = NodeFromWorldPoint(targetPos);
+
+        List<Node> openSet = new List<Node>();
+        HashSet<Node> closedSet = new HashSet<Node>();
+        openSet.Add(startNode);
+
+        while (openSet.Count > 0)
         {
-            List<Node> neighbours = new List<Node>();
-            neighbours = GetNeighbours(node);
-            foreach (Node neighbour in neighbours)
+            Node node = openSet[0];
+            for (int i = 1; i < openSet.Count; i++)
             {
-                if (neighbour.walkable)
-                    return neighbour;
-            }
-        }
-        return null;
-    }
-
-    public List<Node> GetNeighbours(Node node)
-    {
-        // Make new list of neighbours
-        List<Node> neighbours = new List<Node>();
-        // try and look at surrounding neighbours
-        for (int x = -1; x <= 1; x++)
-        {
-            for (int z = -1; z <= 1; z++)
-            {
-                // if the current index is the node that is being checked
-                if (x == 0 && z == 0)
-                    continue;
-
-                //Check the current surrounding node
-                int checkX = node.gridX + x;
-                int checkZ = node.gridZ + z;
-
-                // Check if the index is in the bounds of the grid
-                if (checkX >= 0 &&
-                    checkX < gridSizeX &&
-                    checkZ >= 0 &&
-                    checkZ < gridSizeZ)
+                if (openSet[i].fCost < node.fCost || openSet[i].fCost == node.fCost)
                 {
-                    // add the neighbour to the list
-                    neighbours.Add(nodes[checkX, checkZ]);
+                    if (openSet[i].hCost < node.hCost)
+                        node = openSet[i];
                 }
             }
 
+            openSet.Remove(node);
+            closedSet.Add(node);
+
+            if (node == targetNode)
+            {
+                path = RetracePath(startNode, targetNode);
+                return path;
+            }
+
+            foreach (Node neighbour in GetNeighbours(node))
+            {
+                if (!neighbour.walkable || closedSet.Contains(neighbour))
+                {
+                    continue;
+                }
+
+                int newCostToNeighbour = node.gCost + GetDistance(node, neighbour);
+                if (newCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+                {
+                    neighbour.gCost = newCostToNeighbour;
+                    neighbour.hCost = GetDistance(neighbour, targetNode);
+                    neighbour.parent = node;
+
+                    if (!openSet.Contains(neighbour))
+                        openSet.Add(neighbour);
+                }
+            }
         }
-        // Return the neighbours
-        return neighbours;
+
+        return null;
+    }
+
+    List<Node> RetracePath(Node startNode, Node endNode)
+    {
+        List<Node> path = new List<Node>();
+        Node currentNode = endNode;
+
+        while (currentNode != startNode)
+        {
+            path.Add(currentNode);
+            currentNode = currentNode.parent;
+        }
+        path.Reverse();
+
+        return path;
+    }
+
+    int GetDistance(Node nodeA, Node nodeB)
+    {
+        int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
+        int dstZ = Mathf.Abs(nodeA.gridZ - nodeB.gridZ);
+
+        if (dstX > dstZ)
+            return 14 * dstZ + 10 * (dstX - dstZ);
+        return 14 * dstX + 10 * (dstZ - dstX);
     }
 }

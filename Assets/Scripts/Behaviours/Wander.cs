@@ -7,14 +7,19 @@ using GGL;
 public class Wander : SteeringBehaviour
 {
     public float offset = 1.0f;
-     public float radius = 1.0f;
-      public float jitter = 0.2f;
+    public float radius = 1.0f;
+    public float jitter = 0.2f;
 
     private Vector3 targetDir;
-     private Vector3 randomDir;
+    private Vector3 randomDir;
+    private Animator animator;
+
 
     public override Vector3 GetForce()
     {
+        animator = GetComponent<Animator>();
+        animator.SetFloat("moveSpeed", 1);
+
         // Set force to 0
         Vector3 force = Vector3.zero;
         // Generate random numbers between a certain range
@@ -58,7 +63,7 @@ public class Wander : SteeringBehaviour
         // Set desiredForce to seekPos - position
         Vector3 desiredForce = seekPos - transform.position;
         // IF desired force is not zero
-        if(desiredForce.magnitude > 0)
+        if (desiredForce.magnitude > 0)
         {
             // Set desiredForce to desiredForce normalized x weighting
             desiredForce = desiredForce.normalized * weighting;

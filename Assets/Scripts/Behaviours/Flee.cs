@@ -7,8 +7,12 @@ public class Flee : SteeringBehaviour
     public Transform target;
     public float safeDistance = 100f;
 
+    private Animator animator;
     public override Vector3 GetForce()
     {
+        animator = GetComponent<Animator>();
+        animator.SetFloat("moveSpeed", 6);
+
         Vector3 force = Vector3.zero;
 
         if (target == null)

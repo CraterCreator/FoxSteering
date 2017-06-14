@@ -7,8 +7,13 @@ public class Seek : SteeringBehaviour
     public Transform target;
     public float stoppingDistance = 0f;
 
+    private Animator animator;
+
     public override Vector3 GetForce()
     {
+        animator = GetComponent<Animator>();
+        animator.SetFloat("moveSpeed", 6);
+
         Vector3 force = Vector3.zero;
 
         // IF there is no target, then return force
